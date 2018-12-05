@@ -1,0 +1,7 @@
+.dart_tool/
+.pub/
+ios/
+android/
+.packages
+packages
+pubspec.lock

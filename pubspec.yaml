@@ -1,0 +1,17 @@
+name: store
+description: Reactive data store for Flutter
+version: 0.0.1
+authors:
+  - Stanislav Termosa <contact@me.st>
+homepage: https://github.com/termosa/flutter-store
+
+environment:
+  sdk: ">=2.0.0-dev.28.0 <3.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
