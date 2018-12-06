@@ -1,10 +1,10 @@
 import 'package:flutter/widgets.dart';
+import 'dart:collection';
 
 typedef StoreValueComputer = dynamic Function();
 typedef _Task<T> = T Function();
 
 abstract class _StoreWatcher {
-
   _requestUpdate();
 
   List<_StoreData> _targets = [];
@@ -95,7 +95,7 @@ class _ComputedData extends _StoreData with _StoreWatcher {
 }
 
 abstract class StoreModel {
-  Map<String, _StaticData> _data = {};
+  Map<dynamic, _StaticData> _data = {};
   Map<int, _ComputedData> _computedData = {};
 
   dynamic compute(StoreValueComputer computer) {
@@ -108,48 +108,69 @@ abstract class StoreModel {
     return _computedData[computer.hashCode].value;
   }
 
-  get(String name) {
-    if (_data[name] == null) {
-      _data[name] = _StaticData();
+  get(dynamic key) {
+    if (_data[key] == null) {
+      _data[key] = _StaticData();
     }
     if (_watchersStack.length > 0) {
-      _watchersStack.last._watch(_data[name]);
+      _watchersStack.last._watch(_data[key]);
     }
-    return _data[name]?.value;
+    return _data[key]?.value;
   }
 
-  set(String name, dynamic value) {
-    if (_data[name] == null) {
-      _data[name] = _StaticData(value);
+  set(dynamic key, dynamic value) {
+    if (_data[key] == null) {
+      _data[key] = _StaticData(value);
     } else {
-      _data[name].value = value;
+      _data[key].value = value;
     }
-    _data[name].notify();
+    _data[key].notify();
     return value;
   }
 }
 
+class StoreListModel<T> extends StoreModel with ListMixin<T> {
+  set length(int newLength) => set('length', newLength);
+
+  int get length => get('length') ?? 0;
+
+  T operator [](int index) => get(index); // TODO: validate index
+
+  void operator []=(int index, T value) => set(index, value);
+}
+
 class StoreBuilder extends StatefulWidget {
-  const StoreBuilder({
-    Key key,
-    @required this.builder
-  }) : assert(builder != null),
-       super(key: key);
+  const StoreBuilder({Key key, @required this.builder})
+      : assert(builder != null),
+        super(key: key);
 
   final WidgetBuilder builder;
 
   @override
-  State<StoreBuilder> createState() => _StoreBuilderState();
+  State<StoreBuilder> createState() => _StoreState<StoreBuilder>(builder);
 }
 
-class _StoreBuilderState extends State<StoreBuilder> with _StoreWatcher {
+abstract class StoreWidget extends StatefulWidget {
+  const StoreWidget({Key key}) : super(key: key);
 
-  _requestUpdate() => setState(() {});
+  Widget build(BuildContext context);
+
+  @override
+  StatefulElement createElement() => StatefulElement(this);
+
+  @override
+  State<StoreWidget> createState() => _StoreState<StoreWidget>(build);
+}
+
+class _StoreState<T> extends State<T> with _StoreWatcher {
+  _StoreState(this.builder) : assert(builder != null);
+
+  final WidgetBuilder builder;
 
   @override
   Widget build(BuildContext context) {
     _unwatchAll();
-    return _watchTask<Widget>(this, () => widget.builder(context));
+    return _watchTask<Widget>(this, () => builder(context));
   }
 
   dispose() {
@@ -157,4 +178,5 @@ class _StoreBuilderState extends State<StoreBuilder> with _StoreWatcher {
     super.dispose();
   }
 
+  _requestUpdate() => setState(() {});
 }

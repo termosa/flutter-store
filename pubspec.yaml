@@ -1,6 +1,6 @@
 name: store
 description: Reactive data store for Flutter
-version: 0.0.2
+version: 0.0.3
 authors:
   - Stanislav Termosa <contact@me.st>
 homepage: https://github.com/termosa/flutter-store
