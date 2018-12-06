@@ -1,22 +1,44 @@
 import 'package:flutter/widgets.dart';
 
 typedef StoreValueComputer = dynamic Function();
-typedef StoreValueSubscriber<T> = T Function();
+typedef _Task<T> = T Function();
 
-abstract class StoreSubscriber {
-  notify();
-}
+abstract class _StoreWatcher {
 
-List<StoreSubscriber> _subscribersStack = [];
+  _requestUpdate();
 
-T _follow<T>(StoreSubscriber subscriber, StoreValueSubscriber<T> valueSubscriber) {
-  if (!_subscribersStack.contains(subscriber)) {
-    _subscribersStack.add(subscriber);
+  List<_StoreData> _targets = [];
+
+  _watch(_StoreData target) {
+    if (!_targets.contains(target)) {
+      _targets.add(target);
+      target._subscribe(this);
+    }
   }
 
-  final result = valueSubscriber();
+  _unwatch(_StoreData target) {
+    if (_targets.contains(target)) {
+      _targets.remove(target);
+      target._unsubscribe(this);
+    }
+  }
 
-  _subscribersStack.remove(subscriber);
+  _unwatchAll() {
+    _targets.forEach((target) => target._unsubscribe(this));
+    _targets.clear();
+  }
+}
+
+List<_StoreWatcher> _watchersStack = [];
+
+T _watchTask<T>(_StoreWatcher watcher, _Task<T> task) {
+  if (!_watchersStack.contains(watcher)) {
+    _watchersStack.add(watcher);
+  }
+
+  final result = task();
+
+  _watchersStack.remove(watcher);
 
   return result;
 }
@@ -24,16 +46,22 @@ T _follow<T>(StoreSubscriber subscriber, StoreValueSubscriber<T> valueSubscriber
 abstract class _StoreData {
   dynamic get value;
 
-  List<StoreSubscriber> _subscribers = [];
+  List<_StoreWatcher> _watchers = [];
 
-  subscribe() {
-    if (_subscribersStack.length > 0 && !_subscribers.contains(_subscribersStack.last)) {
-      _subscribers.add(_subscribersStack.last);
+  _subscribe(_StoreWatcher watcher) {
+    if (!_watchers.contains(watcher)) {
+      _watchers.add(watcher);
+    }
+  }
+
+  _unsubscribe(_StoreWatcher watcher) {
+    if (_watchers.contains(watcher)) {
+      _watchers.remove(watcher);
     }
   }
 
   notify() {
-    _subscribers.forEach((subscriber) => subscriber.notify());
+    _watchers.forEach((subscriber) => subscriber._requestUpdate());
   }
 }
 
@@ -43,7 +71,7 @@ class _StaticData extends _StoreData {
   dynamic value;
 }
 
-class _ComputedData extends _StoreData implements StoreSubscriber {
+class _ComputedData extends _StoreData with _StoreWatcher {
   _ComputedData(this.computer);
 
   StoreValueComputer computer;
@@ -53,13 +81,14 @@ class _ComputedData extends _StoreData implements StoreSubscriber {
 
   dynamic get value {
     if (_needsUpdate) {
-      _computedValue = _follow(this, computer);
+      _unwatchAll();
+      _computedValue = _watchTask(this, computer);
       _needsUpdate = false;
     }
     return _computedValue;
   }
 
-  notify() {
+  _requestUpdate() {
     _needsUpdate = true;
     super.notify();
   }
@@ -73,7 +102,9 @@ abstract class StoreModel {
     if (!_computedData.containsKey(computer.hashCode)) {
       _computedData[computer.hashCode] = _ComputedData(computer);
     }
-    _computedData[computer.hashCode].subscribe();
+    if (_watchersStack.length > 0) {
+      _watchersStack.last._watch(_computedData[computer.hashCode]);
+    }
     return _computedData[computer.hashCode].value;
   }
 
@@ -81,7 +112,9 @@ abstract class StoreModel {
     if (_data[name] == null) {
       _data[name] = _StaticData();
     }
-    _data[name].subscribe();
+    if (_watchersStack.length > 0) {
+      _watchersStack.last._watch(_data[name]);
+    }
     return _data[name]?.value;
   }
 
@@ -109,12 +142,19 @@ class StoreBuilder extends StatefulWidget {
   State<StoreBuilder> createState() => _StoreBuilderState();
 }
 
-class _StoreBuilderState extends State<StoreBuilder> implements StoreSubscriber {
+class _StoreBuilderState extends State<StoreBuilder> with _StoreWatcher {
 
-  notify() => setState(() {});
+  _requestUpdate() => setState(() {});
 
   @override
   Widget build(BuildContext context) {
-    return _follow<Widget>(this, () => widget.builder(context));
+    _unwatchAll();
+    return _watchTask<Widget>(this, () => widget.builder(context));
   }
+
+  dispose() {
+    _unwatchAll();
+    super.dispose();
+  }
+
 }
